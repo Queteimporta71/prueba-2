@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with authorization status",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "isAdmin": { "type": "boolean" },
+        "codeUsed": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "email", "isActive", "isAdmin", "codeUsed", "createdAt"]
+    },
+    "Plan": {
+       "title": "Plan",
+       "description": "User's customized plan",
+       "type": "object",
+       "properties": {
+         "dimensions": { "type": "string" },
+         "updatedAt": { "type": "number" }
+       },
+       "required": ["dimensions", "updatedAt"]
+    },
+    "Progress": {
+       "title": "Progress",
+       "description": "Daily progress",
+       "type": "object",
+       "properties": {
+         "date": { "type": "string" },
+         "values": { "type": "string" },
+         "updatedAt": { "type": "number" }
+       },
+       "required": ["date", "values", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User accounts"
+    },
+    "/users/{userId}/plan/{planId}": {
+      "schema": { "$ref": "Plan" },
+      "description": "Current plan configuration spanning the 6 dimensions"
+    },
+    "/users/{userId}/progress/{progressId}": {
+      "schema": { "$ref": "Progress" },
+      "description": "Progress for a specific date"
+    }
+  }
+}

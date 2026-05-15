@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function isAdmin() { 
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true; 
+    }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'email', 'isActive', 'isAdmin', 'codeUsed', 'createdAt'])
+        && data.keys().size() == 6
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 200
+        && data.isActive is bool
+        && data.isAdmin is bool
+        && data.codeUsed is string && data.codeUsed.size() <= 50
+        && data.createdAt is number;
+    }
+
+    match /users/{userId} {
+      // Create user: Users can create their own profile. They cannot set themselves as admin.
+      allow create: if isOwner(userId) 
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().createdAt == request.time.toMillis()
+        && incoming().isAdmin == (request.auth.token.email == 'rolivaresg65@gmail.com')
+        && incoming().isActive == true
+        && incoming().email == request.auth.token.email;
+
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      // Update user: Admin can change isActive and isAdmin. User can update their name.
+      allow update: if isValidId(userId) && (
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isActive', 'isAdmin'])) ||
+        (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['name']))
+      );
+      
+      allow delete: if isAdmin();
+      
+      function isValidPlan(data) {
+        // We expect dimensions to be a stringified JSON to bypass complex validation limits, but we ensure its size.
+        return data.keys().hasAll(['dimensions', 'updatedAt'])
+            && data.keys().size() == 2
+            && data.dimensions is string && data.dimensions.size() <= 800000
+            && data.updatedAt is number;
+      }
+      
+      match /plan/{planId} {
+        allow create: if isOwner(userId)
+          && isValidId(planId)
+          && isValidPlan(incoming());
+          
+        allow get: if isOwner(userId) || isAdmin();
+        
+        allow update: if isOwner(userId)
+          && isValidId(planId)
+          && isValidPlan(incoming())
+          && incoming().diff(existing()).affectedKeys().hasOnly(['dimensions', 'updatedAt']);
+          
+        allow list: if isOwner(userId) || isAdmin();
+      }
+      
+      function isValidProgress(data) {
+        return data.keys().hasAll(['month', 'days', 'updatedAt'])
+            && data.keys().size() == 3
+            && data.month is string && data.month.size() <= 7
+            && data.days is string && data.days.size() <= 900000
+            && data.updatedAt is number;
+      }
+
+      match /progress/{progressId} {
+        allow create: if isOwner(userId)
+          && isValidId(progressId)
+          && isValidProgress(incoming());
+
+        allow get: if isOwner(userId) || (isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+        
+        allow update: if isOwner(userId)
+          && isValidId(progressId)
+          && isValidProgress(incoming())
+          && (incoming().diff(existing()).affectedKeys().hasOnly(['days', 'updatedAt']) || incoming().diff(existing()).affectedKeys().size() == 0);
+      }
+    }
+  }
+}
